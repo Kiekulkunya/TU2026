@@ -1,0 +1,108 @@
+Dataiku : ARIMA/ARIMAX
+
+ARIMA
+
+Description 
+
+ARIMA — uses only the target variable (y alone) :Predicts BBL.BK_Close using only its own past values . Ignores all 33 features
+
+order=(1, 1, 1) means (p, d, q):
+p = 1 (Autoregressive) — the model uses 1 lag of past values to predict the next value. So today's prediction depends on yesterday's value. If p=3, it would look back 3 time steps.
+
+d = 1 (Differencing) — the model differences the data 1 time to make it stationary. It transforms the raw values into period-over-period changes. For example, instead of modeling [100, 105, 112], it models [5, 7]. If d=2, it would difference twice.
+
+q = 1 (Moving Average) — the model uses 1 past forecast error to correct its predictions. So if yesterday's prediction was off by 3, it factors that error into today's forecast. If q=3, it would use the last 3 errors.
+
+(1,1,1) — general purpose, good starting point
+
+Code: 
+
+# ARIMA
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.base import BaseEstimator, RegressorMixin
+import numpy as np
+import warnings
+
+class ARIMARegressor(BaseEstimator, RegressorMixin):
+    def __init__(self, order=(1, 1, 1)):
+        self.order = order
+    def fit(self, X, y=None):
+        self.y_train_ = np.array(y, dtype=float)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                self.model_ = ARIMA(
+                    endog=self.y_train_,
+                    order=self.order,
+                    trend='t'
+                ).fit()
+                self.fitted_ = True
+            except Exception:
+                self.fitted_ = False
+        return self
+    def predict(self, X):
+        n = len(X)
+        if not self.fitted_:
+            return np.full(n, np.nanmean(self.y_train_))
+        try:
+            preds = self.model_.forecast(steps=n)
+            preds = np.array(preds, dtype=float)
+            if np.isnan(preds).any():
+                return np.full(n, np.nanmean(self.y_train_))
+            return preds
+        except Exception:
+            return np.full(n, np.nanmean(self.y_train_))
+
+clf = ARIMARegressor(order=(1, 1, 1))
+
+
+ARIMAX: 
+
+Description 
+
+ARIMAX — uses target variable + external features (y + X)
+Predicts BBL.BK_Close using its own past values plus your 33 features like FX_THB_USD, ^SET.BK_Close, ^GSPC_Close, etc.
+Actually uses the data Dataiku passes in
+
+Code
+
+# ARIMAX
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.base import BaseEstimator, RegressorMixin
+import numpy as np
+import warnings
+
+class ARIMAXRegressor(BaseEstimator, RegressorMixin):
+    def __init__(self, order=(1, 0, 1)):
+        self.order = order
+    def fit(self, X, y=None):
+        self.y_train_ = np.array(y, dtype=float)
+        self.X_train_ = np.array(X, dtype=float)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                self.model_ = ARIMA(
+                    endog=self.y_train_,
+                    exog=self.X_train_,
+                    order=self.order,
+                    trend='t'
+                ).fit()
+                self.fitted_ = True
+            except Exception:
+                self.fitted_ = False
+        return self
+    def predict(self, X):
+        X = np.array(X, dtype=float)
+        n = len(X)
+        if not self.fitted_:
+            return np.full(n, np.nanmean(self.y_train_))
+        try:
+            preds = self.model_.forecast(steps=n, exog=X)
+            preds = np.array(preds, dtype=float)
+            if np.isnan(preds).any():
+                return np.full(n, np.nanmean(self.y_train_))
+            return preds
+        except Exception:
+            return np.full(n, np.nanmean(self.y_train_))
+
+clf = ARIMAXRegressor(order=(1, 0, 1))
